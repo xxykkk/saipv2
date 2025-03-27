@@ -1,0 +1,15 @@
+pretrained_models
+data
+work_dirs
+temp
+.vscode
+main_align_unihcp_pretrain_Argu.py
+
+1.py
+tar.sh
+vision_transformer_no_cls.py
+preprocessing_theia/__pycache__/*
+preprocessing/__pycache__/*
+dinov2_layers/__pycache__/*
+__pycache__/*
+util/__pycache__/*
