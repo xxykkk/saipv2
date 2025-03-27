@@ -4,6 +4,7 @@ work_dirs
 temp
 .vscode
 main_align_unihcp_pretrain_Argu.py
+slurm_logs
 
 1.py
 tar.sh

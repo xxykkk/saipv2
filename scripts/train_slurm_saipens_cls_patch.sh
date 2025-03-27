@@ -11,8 +11,8 @@
 
 #SBATCH --mail-type=end
 #SBATCH --mail-user=2500049201@qq.com
-#SBATCH --output=slurm_logs/kd_sapiens-%j.out
-#SBATCH --error=slurm_logs/kd_sapiens-%j.err
+#SBATCH --output=slurm_logs/kd_sapiens_cls_patch-%j.out
+#SBATCH --error=slurm_logs/kd_sapiens-cls_patch-%j.err
 
 
 NPROC_PER_NODE=$SLURM_GPUS_ON_NODE
@@ -37,7 +37,7 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
-output_dir="work_dirs/lup1m_sapiens-l_to_vit_tiny_hw256_cp128_cls"
+output_dir="work_dirs/sapiens-l_to_vit_tiny_hw256_cp128_cls_patch"
 
 
 if [ ! -d "$output_dir" ]; then
@@ -45,11 +45,11 @@ if [ ! -d "$output_dir" ]; then
 fi
 script_path=$(realpath "$0")
 cp "$script_path" "$output_dir/"
-cp "main_align_pretrain_LUP1M_sapiens.py" "$output_dir/"
+cp "main_align_pretrain.py" "$output_dir/"
 echo "start training"
 
 torchrun --nproc_per_node=$NPROC_PER_NODE --master_port=29601 main_align_pretrain.py \
-  --batch_size=256 --accum_iter=1 \
+  --batch_size=128 --accum_iter=2 \
   --model=saipv1_kd_vit_tiny_patch16_adapt_vit_l \
   --data_path=data/LUP1M \
   --norm_pix_loss \

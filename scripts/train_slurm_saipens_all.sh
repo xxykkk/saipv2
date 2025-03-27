@@ -21,7 +21,6 @@ NUM_WORKERS=$(((NPROC_PROCESS - 1)*2))
 
 
 module load cuda/11.8
-module load nccl
 source /share/home/u24011/software/miniconda3/etc/profile.d/conda.sh
 conda activate pretrain
 

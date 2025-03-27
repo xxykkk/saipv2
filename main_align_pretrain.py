@@ -328,7 +328,8 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
             pred_s = student(samples[0], meta)
             m_loss = csm_kd_loss(pred_s['aligned_cls_feats'], pred_s['aligned_patch_feats'], pred_s['qkv_atten'], pred_t['feats_from_teacher'].detach(), pred_t['feats_from_teacher_patch'].detach(), pred_t['qkv_atten'])
             # m_loss = csm_kd_loss(pred_s['aligned_cls_feats'], pred_s['qkv_atten'], pred_t['feats_from_teacher'].detach(), pred_t['qkv_atten'])
-            loss = m_loss['align_patch_loss'] + m_loss['align_att_loss'] + m_loss['align_rep_loss'] 
+            # loss = m_loss['align_patch_loss'] + m_loss['align_att_loss'] + m_loss['align_rep_loss'] 
+            loss = m_loss['align_patch_loss'] + m_loss['align_rep_loss'] 
         
         loss_value = loss.item()
 
@@ -351,7 +352,11 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
         # metric_logger.update(loss=loss_value, align_att_loss=100*m_loss['align_att_loss'].item()), align_att_loss=100*m_loss['align_att_loss'].item()
         # metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_rep_loss=m_loss['align_rep_loss'].item())
         # metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
-        metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
+        
+        #metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
+        metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item())
+        
+        
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
 
