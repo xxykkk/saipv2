@@ -328,17 +328,12 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
             pred_s = student(samples[0], meta)
             m_loss = csm_kd_loss(pred_s['aligned_cls_feats'], pred_s['aligned_patch_feats'], pred_s['qkv_atten'], pred_t['feats_from_teacher'].detach(), pred_t['feats_from_teacher_patch'].detach(), pred_t['qkv_atten'])
             # m_loss = csm_kd_loss(pred_s['aligned_cls_feats'], pred_s['qkv_atten'], pred_t['feats_from_teacher'].detach(), pred_t['qkv_atten'])
-            loss = m_loss['align_patch_loss'] + m_loss['align_att_loss'] + m_loss['align_rep_loss'] 
-            # loss = m_loss['align_patch_loss'] + m_loss['align_rep_loss'] 
+            # loss = m_loss['align_patch_loss'] + m_loss['align_att_loss'] + m_loss['align_rep_loss'] 
+            loss = m_loss['align_patch_loss']# + m_loss['align_rep_loss'] 
         
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
-            with open("slurm_logs/Nan_Loss(main_align_pretrain).txt", "a") as f:
-                f.write("Loss is {}, stopping training\n".format(loss_value))
-                f.write("Loss is {}, stopping training\n".format(m_loss['align_att_loss'].item()))
-                f.write("Loss is {}, stopping training\n".format(m_loss['align_rep_loss'].item()))
-                f.write("Loss is {}, stopping training\n\n".format(m_loss['align_cls_loss'].item()))
             print("Loss is {}, stopping training".format(loss_value))
             sys.exit(1)
 
@@ -359,7 +354,7 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
         # metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
         
         #metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
-        metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item())
+        metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_rep_loss=m_loss['align_rep_loss'].item(), align_att_loss=m_loss['align_att_loss'].item() )
         
         
         lr = optimizer.param_groups[0]["lr"]
@@ -632,24 +627,12 @@ class CSMKDLossV1(nn.Module):
         
         return {'align_rep_loss':rep_sim_loss,  'align_att_loss':att_sim_loss}
 
-class SafeLog(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x):
-        ctx.save_for_backward(x)
-        return torch.log(x.clamp(min=1e-10))
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x, = ctx.saved_tensors
-        grad_input = grad_output / x.clamp(min=1e-10)
-        return grad_input
-
 class CSMKDLoss(nn.Module):
     def __init__(self, ncrops):
         super().__init__()
         self.ncrops = ncrops
 
-    def forward(self, s_feats, s_feats_patch, s_atten, t_feats, t_feats_patch, t_atten):
+    def forward(self, s_feats, s_feats_patch, s_atten, t_feats, t_feats_patch,t_atten):
       
         s_feats = s_feats.chunk(self.ncrops)
         s_feats_patch = s_feats_patch.chunk(2)
@@ -673,10 +656,9 @@ class CSMKDLoss(nn.Module):
         for iq, q in enumerate(t_feats):
             for v in range(len(s_feats)):
                 if v < 2 and v == iq:
-                    #i_s_qk_atten = s_qk_atten[v].log()
-                    #i_s_vv_atten = s_vv_atten[v].log()
-                    i_s_qk_atten = SafeLog.apply(s_qk_atten[v])
-                    i_s_vv_atten = SafeLog.apply(s_vv_atten[v])
+                    # detach modify
+                    i_s_qk_atten = s_qk_atten[v].log().detach()
+                    i_s_vv_atten = s_vv_atten[v].log().detach()
                     if s_qk_atten[v].shape != t_qk_atten[iq].shape:
                         i_s_qk_atten = F.interpolate(i_s_qk_atten, size=t_qk_atten[iq].shape[-2:])
                         i_s_vv_atten = F.interpolate(i_s_vv_atten, size=t_qk_atten[iq].shape[-2:])

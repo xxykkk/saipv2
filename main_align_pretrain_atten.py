@@ -327,19 +327,17 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
             pred_t = teacher(samples[0], meta)
             pred_s = student(samples[0], meta)
             m_loss = csm_kd_loss(pred_s['aligned_cls_feats'], pred_s['aligned_patch_feats'], pred_s['qkv_atten'], pred_t['feats_from_teacher'].detach(), pred_t['feats_from_teacher_patch'].detach(), pred_t['qkv_atten'])
-            # m_loss = csm_kd_loss(pred_s['aligned_cls_feats'], pred_s['qkv_atten'], pred_t['feats_from_teacher'].detach(), pred_t['qkv_atten'])
-            loss = m_loss['align_patch_loss'] + m_loss['align_att_loss'] + m_loss['align_rep_loss'] 
-            # loss = m_loss['align_patch_loss'] + m_loss['align_rep_loss'] 
+            loss = m_loss['align_att_loss'] + m_loss['align_rep_loss'] 
         
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
-            with open("slurm_logs/Nan_Loss(main_align_pretrain).txt", "a") as f:
+            with open("slurm_logs/Nan_Loss.txt", "a") as f:
                 f.write("Loss is {}, stopping training\n".format(loss_value))
                 f.write("Loss is {}, stopping training\n".format(m_loss['align_att_loss'].item()))
                 f.write("Loss is {}, stopping training\n".format(m_loss['align_rep_loss'].item()))
                 f.write("Loss is {}, stopping training\n\n".format(m_loss['align_cls_loss'].item()))
-            print("Loss is {}, stopping training".format(loss_value))
+            # print("Loss is {}, stopping training".format(loss_value))
             sys.exit(1)
 
         loss /= accum_iter
@@ -353,13 +351,8 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
 
         torch.cuda.synchronize()
-        # metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
-        # metric_logger.update(loss=loss_value, align_att_loss=100*m_loss['align_att_loss'].item()), align_att_loss=100*m_loss['align_att_loss'].item()
-        # metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_rep_loss=m_loss['align_rep_loss'].item())
-        # metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
         
-        #metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
-        metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item())
+        metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
         
         
         lr = optimizer.param_groups[0]["lr"]
@@ -649,7 +642,7 @@ class CSMKDLoss(nn.Module):
         super().__init__()
         self.ncrops = ncrops
 
-    def forward(self, s_feats, s_feats_patch, s_atten, t_feats, t_feats_patch, t_atten):
+    def forward(self, s_feats, s_feats_patch, s_atten, t_feats, t_feats_patch,t_atten):
       
         s_feats = s_feats.chunk(self.ncrops)
         s_feats_patch = s_feats_patch.chunk(2)
@@ -673,10 +666,11 @@ class CSMKDLoss(nn.Module):
         for iq, q in enumerate(t_feats):
             for v in range(len(s_feats)):
                 if v < 2 and v == iq:
-                    #i_s_qk_atten = s_qk_atten[v].log()
-                    #i_s_vv_atten = s_vv_atten[v].log()
+                    # i_s_qk_atten = s_qk_atten[v].log()
+                    # i_s_vv_atten = s_vv_atten[v].log()
                     i_s_qk_atten = SafeLog.apply(s_qk_atten[v])
                     i_s_vv_atten = SafeLog.apply(s_vv_atten[v])
+
                     if s_qk_atten[v].shape != t_qk_atten[iq].shape:
                         i_s_qk_atten = F.interpolate(i_s_qk_atten, size=t_qk_atten[iq].shape[-2:])
                         i_s_vv_atten = F.interpolate(i_s_vv_atten, size=t_qk_atten[iq].shape[-2:])
@@ -688,14 +682,15 @@ class CSMKDLoss(nn.Module):
                     rep_sim_patch_loss += F.huber_loss(s_feats_patch[v], t_feats_patch[iq])#.mean(-1).mean()
                     n_rep_patch_loss_terms += 1
                 else:
-                    loss = nn.MSELoss(reduction="none")(s_feats[v], q).mean(-1)
-                    rep_sim_cls_loss += loss.mean()
-                    n_rep_cls_loss_terms += 1
-        rep_sim_cls_loss /= n_rep_cls_loss_terms
+                    # loss = nn.MSELoss(reduction="none")(s_feats[v], q).mean(-1)
+                    # rep_sim_cls_loss += loss.mean()
+                    # n_rep_cls_loss_terms += 1
+                    pass
+        # rep_sim_cls_loss /= n_rep_cls_loss_terms
         rep_sim_patch_loss /= n_rep_patch_loss_terms
         att_sim_loss /= n_att_loss_terms
         
-        return {'align_rep_loss':rep_sim_cls_loss, 'align_patch_loss':0.1*rep_sim_patch_loss, 'align_att_loss':0.1*att_sim_loss}
+        return {'align_rep_loss':torch.tensor(0), 'align_patch_loss':0.1*rep_sim_patch_loss, 'align_att_loss':0.1*att_sim_loss}
     
 class CSMKDLossv2(nn.Module):
     def __init__(self, ncrops):
