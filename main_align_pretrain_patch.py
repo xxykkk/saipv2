@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import random
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
+# assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
@@ -354,7 +354,7 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
         # metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
         
         #metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
-        metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_rep_loss=m_loss['align_rep_loss'].item(), align_att_loss=m_loss['align_att_loss'].item() )
+        metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
         
         
         lr = optimizer.param_groups[0]["lr"]

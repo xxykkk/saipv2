@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import random
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
+# assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
@@ -352,7 +352,7 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
 
         torch.cuda.synchronize()
         
-        metric_logger.update(loss=loss_value, align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item(), align_rep_loss=m_loss['align_rep_loss'].item())
+        metric_logger.update(loss=loss_value, align_rep_loss=m_loss['align_rep_loss'].item(), align_patch_loss=m_loss['align_patch_loss'].item(), align_att_loss=100*m_loss['align_att_loss'].item())
         
         
         lr = optimizer.param_groups[0]["lr"]
@@ -682,15 +682,15 @@ class CSMKDLoss(nn.Module):
                     rep_sim_patch_loss += F.huber_loss(s_feats_patch[v], t_feats_patch[iq])#.mean(-1).mean()
                     n_rep_patch_loss_terms += 1
                 else:
-                    # loss = nn.MSELoss(reduction="none")(s_feats[v], q).mean(-1)
-                    # rep_sim_cls_loss += loss.mean()
-                    # n_rep_cls_loss_terms += 1
+                    loss = nn.MSELoss(reduction="none")(s_feats[v], q).mean(-1)
+                    rep_sim_cls_loss += loss.mean()
+                    n_rep_cls_loss_terms += 1
                     pass
-        # rep_sim_cls_loss /= n_rep_cls_loss_terms
+        rep_sim_cls_loss /= n_rep_cls_loss_terms
         rep_sim_patch_loss /= n_rep_patch_loss_terms
         att_sim_loss /= n_att_loss_terms
         
-        return {'align_rep_loss':torch.tensor(0), 'align_patch_loss':0.1*rep_sim_patch_loss, 'align_att_loss':0.1*att_sim_loss}
+        return {'align_rep_loss':rep_sim_cls_loss, 'align_patch_loss':0.1*rep_sim_patch_loss, 'align_att_loss':0.1*att_sim_loss}
     
 class CSMKDLossv2(nn.Module):
     def __init__(self, ncrops):

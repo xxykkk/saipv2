@@ -8,6 +8,7 @@ from itertools import repeat
 from sapiens_vit import VisionTransformer as SapiensVisionTransformer
 from unihcp import ViT as Unihcp_vit
 from unihcp import recursive_update, NestedTensor
+from hap_vit import PoseMaskedAutoencoderViT as HAP_PoseMaskedAutoencoderViT
 
 def _ntuple(n):
     def parse(x):
@@ -278,6 +279,7 @@ class ExpertViT(VisionTransformer):
             
             msg = self.load_state_dict(param_dict, strict=False)
             print('Load from {}: {}'.format(pretrained, msg))
+            # input("Nexzt")
 
     def forward_backbone(self, x):
         # print('begin:',x.shape)
@@ -486,11 +488,12 @@ def vit_base(patch_size=16, **kwargs):
     return model
 
 ######################################## vit ########################################
-def expert_vit_base(patch_size=16, **kwargs):
+def expert_vit_base(patch_size=16, img_size=(224, 224), **kwargs):
     model = ExpertViT(
-        patch_size=patch_size, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
+        img_size=img_size, patch_size=patch_size, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
+    
 
 ######################################## sapiens ########################################
 def expert_sapiens_1b(patch_size=16, pretrained='', **kwargs):
@@ -556,4 +559,119 @@ class ExpertPath(nn.Module):
 
 def expert_path_large(pretrained=''):
     model = ExpertPath(pretrained=pretrained)
+    return model
+
+
+
+
+
+# ##############################---------HAP--------################################ #
+def expert_vit_base_hap(patch_size=16, img_size=(256, 128), **kwargs):
+    model = ExpertViT(
+        img_size=img_size, patch_size=patch_size, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
+        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    return model
+
+########################################## HAP ########################################
+class ExpertHap(HAP_PoseMaskedAutoencoderViT):
+    """ Sapiens Transformer """
+    def __init__(self, pretrained=None, **kwargs):
+        super().__init__(**kwargs)
+        self._init_from_pretrained(pretrained)
+
+    def _init_from_pretrained(self, pretrained=None):
+        if pretrained:
+            state=torch.load(pretrained, map_location='cpu')
+            if 'model' in state:
+                self.load_state_dict(state['model'])
+            else:
+                self.load_state_dict(state)
+            print('Load from {}'.format(pretrained))
+            # input("load access, Next")
+
+    def forward_encoder(self, x, mask_ratio, ):
+        # Embed patches, (N, 3, H, W) -> (N, L, D)
+        x = self.patch_embed(x)
+
+        # Add pos embed w/o cls token
+        x = x + self.pos_embed[:, 1:, :]
+
+        # append cls token
+        cls_token = self.cls_token + self.pos_embed[:, :1, :]
+        x = torch.cat([cls_token.repeat(x.size(0), 1, 1), x], dim=1)
+
+        # Masking, (N, L, D) -> (N, M, D), M = L * (1 - mask_ratio)
+        x_vis, mask, ids_restore = self.random_masking(x, mask_ratio, )
+
+        # Append cls token
+        x_vis = torch.cat((cls_token.expand(x_vis.shape[0], -1, -1), x_vis), dim=1)
+        # Apply Transformer blocks
+        for blk in self.blocks:
+            x_vis, att = blk(x_vis)
+        x_vis = self.norm(x_vis)
+
+        return x_vis, att, ids_restore
+    def forward_decoder(self, x, ids_restore):
+        # Embed tokens
+        x = self.decoder_embed(x)
+
+        # Append mask tokens to sequence
+        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
+        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
+        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
+        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
+
+        # Add pos embed
+        x = x + self.decoder_pos_embed
+
+        # Apply Transformer blocks
+        for blk in self.decoder_blocks:
+            x, att = blk(x)
+        x = self.decoder_norm(x)
+
+        # print('de',x.shape)
+        # Predictor projection ([128, 129, 512])
+        x = self.decoder_pred(x)
+        # print(x.shape) ([128, 129, 768])
+        # # Remove cls token
+        # x = x[:, 1:, :]
+
+        return x, att
+
+    def forward(self, base_imgs, meta, mask_ratio=0, align=False, ):
+        # print(base_imgs.shape, meta['aug_img'].shape)
+        # [bs, 3, 256, 128]
+        imgs=torch.cat([base_imgs, meta['aug_img']])
+
+        pred, last_atten, ids_restore = self.forward_encoder(imgs, mask_ratio, )
+        
+        # embed_vis, att, ids_restore = self.forward_encoder(imgs, mask_ratio, )
+        # # print(embed_vis.shape, att[0].shape) torch.Size([128, 129, 768]) torch.Size([128, 12, 129, 129])
+        # # embed_vis2, mask2, ids_restore2 = self.forward_encoder(imgs, mask_ratio, align=align, )
+
+        # if align:
+        #     loss_align = self.forward_align(embed_vis[:, 0, :], embed_vis2[:, 0, :])
+        # else:
+        #     loss_align = torch.FloatTensor([0]).to(imgs.device)
+
+        # pred, last_atten = self.forward_decoder(embed_vis, ids_restore)  # [N, L, p*p*3] torch.Size([128, 129, 768]) 2*torch.Size([128, 12, 129, 129])
+        # # loss_rec = self.forward_reconst(imgs, pred, mask)
+
+        # # pred2 = self.forward_decoder(embed_vis2, ids_restore2)  # [N, L, p*p*3]
+        # # loss_rec = 0.5 * loss_rec + 0.5 * self.forward_reconst(imgs, pred2, mask2)
+
+        outputs={}
+        outputs['feats_from_teacher'] = pred[:, 0, :]
+        outputs['feats_from_teacher_patch'] = pred[:, 1:, :]
+        outputs['qkv_atten'] =  last_atten
+
+        return outputs
+
+
+def expert_hap_vit_base_patch16(pretrained='', img_size=(256, 128), norm_pix_loss=True):
+    model = ExpertHap(
+        pretrained,
+        img_size=img_size, patch_size=16, embed_dim=768, depth=12, 
+        num_heads=12, decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16, mlp_ratio=4, 
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), norm_pix_loss=True)
     return model

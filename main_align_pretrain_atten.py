@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import random
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
+# assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
@@ -327,7 +327,7 @@ def train_one_epoch(student, teacher, ema_teacher, ema_teacher_without_ddp, csm_
             pred_t = teacher(samples[0], meta)
             pred_s = student(samples[0], meta)
             m_loss = csm_kd_loss(pred_s['aligned_cls_feats'], pred_s['aligned_patch_feats'], pred_s['qkv_atten'], pred_t['feats_from_teacher'].detach(), pred_t['feats_from_teacher_patch'].detach(), pred_t['qkv_atten'])
-            loss = m_loss['align_att_loss'] + m_loss['align_rep_loss'] 
+            loss = m_loss['align_att_loss']
         
         loss_value = loss.item()
 
@@ -573,57 +573,57 @@ class DataAugmentation(object):
 
         return multi_scales
     
-class CSMKDLossV1(nn.Module):
-    def __init__(self, ncrops):
-        super().__init__()
-        self.ncrops = ncrops
+# class CSMKDLossV1(nn.Module):
+#     def __init__(self, ncrops):
+#         super().__init__()
+#         self.ncrops = ncrops
 
-    def forward(self, s_feats, s_feats_patch, s_atten, t_feats, t_feats_patch,t_atten):
+#     def forward(self, s_feats, s_feats_patch, s_atten, t_feats, t_feats_patch,t_atten):
       
-        s_feats = s_feats.chunk(self.ncrops)
-        s_feats_patch = s_feats_patch.chunk(2)
-        t_feats = t_feats.detach().chunk(2)
-        t_feats_patch = t_feats_patch.detach().chunk(2)
+#         s_feats = s_feats.chunk(self.ncrops)
+#         s_feats_patch = s_feats_patch.chunk(2)
+#         t_feats = t_feats.detach().chunk(2)
+#         t_feats_patch = t_feats_patch.detach().chunk(2)
 
-        s_qk_atten, s_vv_atten = s_atten
-        s_qk_atten = s_qk_atten.chunk(2)
-        s_vv_atten = s_vv_atten.chunk(2)
+#         s_qk_atten, s_vv_atten = s_atten
+#         s_qk_atten = s_qk_atten.chunk(2)
+#         s_vv_atten = s_vv_atten.chunk(2)
         
-        t_qk_atten, t_vv_atten = t_atten
-        t_qk_atten = t_qk_atten.detach().chunk(2)
-        t_vv_atten = t_vv_atten.detach().chunk(2)
+#         t_qk_atten, t_vv_atten = t_atten
+#         t_qk_atten = t_qk_atten.detach().chunk(2)
+#         t_vv_atten = t_vv_atten.detach().chunk(2)
 
-        rep_sim_loss = 0
-        n_rep_loss_terms = 0
-        att_sim_loss = 0
-        n_att_loss_terms = 0
-        for iq, q in enumerate(t_feats):
-            for v in range(len(s_feats)):
-                if v < 2 and v == iq:
-                    # print(s_qk_atten[v].shape, t_qk_atten[iq].shape)
-                    i_s_qk_atten = s_qk_atten[v].log()
-                    i_s_vv_atten = s_vv_atten[v].log()
-                    # if s_qk_atten[v].shape != t_qk_atten[iq].shape:
-                    #     i_s_qk_atten = F.interpolate(i_s_qk_atten, size=t_qk_atten[iq].shape[-2:])
-                    #     i_s_vv_atten = F.interpolate(i_s_vv_atten, size=t_qk_atten[iq].shape[-2:])
-                    qk_loss = nn.KLDivLoss(reduction="none")(i_s_qk_atten, t_qk_atten[iq]).sum(-1)
-                    vv_loss = nn.KLDivLoss(reduction="none")(i_s_vv_atten, t_vv_atten[iq]).sum(-1)
-                    att_sim_loss += (qk_loss.mean() + vv_loss.mean())
-                    n_att_loss_terms += 1
+#         rep_sim_loss = 0
+#         n_rep_loss_terms = 0
+#         att_sim_loss = 0
+#         n_att_loss_terms = 0
+#         for iq, q in enumerate(t_feats):
+#             for v in range(len(s_feats)):
+#                 if v < 2 and v == iq:
+#                     # print(s_qk_atten[v].shape, t_qk_atten[iq].shape)
+#                     i_s_qk_atten = s_qk_atten[v].log()
+#                     i_s_vv_atten = s_vv_atten[v].log()
+#                     # if s_qk_atten[v].shape != t_qk_atten[iq].shape:
+#                     #     i_s_qk_atten = F.interpolate(i_s_qk_atten, size=t_qk_atten[iq].shape[-2:])
+#                     #     i_s_vv_atten = F.interpolate(i_s_vv_atten, size=t_qk_atten[iq].shape[-2:])
+#                     qk_loss = nn.KLDivLoss(reduction="none")(i_s_qk_atten, t_qk_atten[iq]).sum(-1)
+#                     vv_loss = nn.KLDivLoss(reduction="none")(i_s_vv_atten, t_vv_atten[iq]).sum(-1)
+#                     att_sim_loss += (qk_loss.mean() + vv_loss.mean())
+#                     n_att_loss_terms += 1
 
-                    # norm_s = torch.nn.functional.normalize(s_feats_patch[v], dim=-1)
-                    # norm_t = torch.nn.functional.normalize(t_feats_patch[iq], dim=-1)
-                    # rep_sim_loss += torch.mean((-(norm_s * norm_t).sum(dim=-1)))
-                    n_rep_loss_terms += 1
-                # else:
-                #     norm_s = torch.nn.functional.normalize(s_feats[v],dim=-1)
-                #     norm_t = torch.nn.functional.normalize(q, dim=-1)
-                #     rep_sim_loss += torch.mean((-(norm_s * norm_t).sum(dim=-1)))
-                #     n_rep_loss_terms += 1
-        rep_sim_loss /= n_rep_loss_terms
-        att_sim_loss /= n_att_loss_terms
+#                     # norm_s = torch.nn.functional.normalize(s_feats_patch[v], dim=-1)
+#                     # norm_t = torch.nn.functional.normalize(t_feats_patch[iq], dim=-1)
+#                     # rep_sim_loss += torch.mean((-(norm_s * norm_t).sum(dim=-1)))
+#                     n_rep_loss_terms += 1
+#                 # else:
+#                 #     norm_s = torch.nn.functional.normalize(s_feats[v],dim=-1)
+#                 #     norm_t = torch.nn.functional.normalize(q, dim=-1)
+#                 #     rep_sim_loss += torch.mean((-(norm_s * norm_t).sum(dim=-1)))
+#                 #     n_rep_loss_terms += 1
+#         rep_sim_loss /= n_rep_loss_terms
+#         att_sim_loss /= n_att_loss_terms
         
-        return {'align_rep_loss':rep_sim_loss,  'align_att_loss':att_sim_loss}
+#         return {'align_rep_loss':rep_sim_loss,  'align_att_loss':att_sim_loss}
 
 class SafeLog(torch.autograd.Function):
     @staticmethod
@@ -682,15 +682,15 @@ class CSMKDLoss(nn.Module):
                     rep_sim_patch_loss += F.huber_loss(s_feats_patch[v], t_feats_patch[iq])#.mean(-1).mean()
                     n_rep_patch_loss_terms += 1
                 else:
-                    # loss = nn.MSELoss(reduction="none")(s_feats[v], q).mean(-1)
-                    # rep_sim_cls_loss += loss.mean()
-                    # n_rep_cls_loss_terms += 1
+                    loss = nn.MSELoss(reduction="none")(s_feats[v], q).mean(-1)
+                    rep_sim_cls_loss += loss.mean()
+                    n_rep_cls_loss_terms += 1
                     pass
-        # rep_sim_cls_loss /= n_rep_cls_loss_terms
+        rep_sim_cls_loss /= n_rep_cls_loss_terms
         rep_sim_patch_loss /= n_rep_patch_loss_terms
         att_sim_loss /= n_att_loss_terms
         
-        return {'align_rep_loss':torch.tensor(0), 'align_patch_loss':0.1*rep_sim_patch_loss, 'align_att_loss':0.1*att_sim_loss}
+        return {'align_rep_loss':rep_sim_cls_loss, 'align_patch_loss':0.1*rep_sim_patch_loss, 'align_att_loss':0.1*att_sim_loss}
     
 class CSMKDLossv2(nn.Module):
     def __init__(self, ncrops):
