@@ -1,13 +1,5 @@
 #!/bin/bash
 
-
-
-
-# module load cuda/11.8
-# module load nccl
-# source /share/home/u24011/software/miniconda3/etc/profile.d/conda.sh
-# conda activate pretrain
-
 ## train config
 NPROC_PER_NODE=8
 NPROC_PROCESS=9
@@ -45,8 +37,10 @@ cp "$script_path" "$output_dir/"
 cp "main_align_pretrain.py" "$output_dir/"
 echo "start training"
 
+export NCCL_P2P_DISABLE=1
+
 torchrun --nproc_per_node=$NPROC_PER_NODE --master_port=29999 main_align_pretrain.py \
-  --batch_size=384 --accum_iter=1 \
+  --batch_size=512 --accum_iter=1 \
   --model=saipv1_kd_vit_tiny_patch16_adapt_vit_b \
   --data_path=data/LUP1M \
   --norm_pix_loss \
@@ -66,6 +60,6 @@ torchrun --nproc_per_node=$NPROC_PER_NODE --master_port=29999 main_align_pretrai
   --teacher_model=expert_vit_base_hap \
   --teacher_pretrained='pretrained_models/hap_official_state_dict_exclude_decoder.pth' \
   --local_crops_number=6 \
-  --start_epoch=0 \
+  --start_epoch=41 \
   --num_workers=$NUM_WORKERS \
   

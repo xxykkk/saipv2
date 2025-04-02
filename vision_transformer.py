@@ -566,6 +566,7 @@ def expert_path_large(pretrained=''):
 
 
 # ##############################---------HAP--------################################ #
+# modified by path #
 def expert_vit_base_hap(patch_size=16, img_size=(256, 128), **kwargs):
     model = ExpertViT(
         img_size=img_size, patch_size=patch_size, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
